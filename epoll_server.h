@@ -14,6 +14,6 @@ class Epoll_Server
 public:
     int Test();
     void setnonblocking(int sock);
-
+    void fileTest(int sock);
 
 };

@@ -15,7 +15,7 @@ int Epoll_Server::Test()
     //初始化服务器，绑定端口
     struct sockaddr_in serveraddr;
     serveraddr.sin_family = AF_INET;
-    char *local_addr="172.31.165.8";
+    char *local_addr="172.18.31.228";
     inet_aton(local_addr,&(serveraddr.sin_addr));
     serveraddr.sin_port=htons(8888);
     if(bind(listenfd,(sockaddr *)&serveraddr, sizeof(serveraddr))<0)
@@ -57,7 +57,7 @@ int Epoll_Server::Test()
         return -1;
     }    
 
-    cout<<"创建成功"<<endl;
+    cout<<"创建成功1"<<endl;
     int n;
     while (true)
     {
@@ -81,16 +81,87 @@ int Epoll_Server::Test()
 
         for(size_t i=0;i<n;++i)
         {   
+            //事件可读
+            if(epoll_events[i].events & EPOLLIN)
+            {
+                if(epoll_events[i].data.fd == listenfd)
+                {
+                    //监听socket(listenfd) 接受新连接
+                     struct sockaddr_in clientaddr;
+                     socklen_t clientaddrlen = sizeof(clientaddr);
+                     int clientfd = accept(listenfd,(sockaddr*)&clientaddr,&clientaddrlen);
+                     if(clientfd != -1)
+                     {
+                        //设置socket(clientfd)为非阻塞
+                         setnonblocking(clientfd);
 
+                         epoll_event clientfd_fd_event;
+                         clientfd_fd_event.data.fd = clientfd;
+                         clientfd_fd_event.events = EPOLLIN;
+
+                         //使用ET模式
+                         //clientfd_fd_event.events |= EPOLLET;
+ 
+                         if(epoll_ctl(epollfd,EPOLL_CTL_ADD,clientfd,&clientfd_fd_event) != -1)
+                         {
+                                cout<<"新的客户端连接 , cliendfd :"<<clientfd<<endl;
+                                fileTest(clientfd);
+                            
+                         }
+                         else
+                         {
+                            cout<<"添加客户端到epollfd失败"<<endl;
+                            close(clientfd);
+                         }
+
+                     }
+                }
+                else
+                {
+                    cout<<"client fd :"<<epoll_events[i].data.fd<<"recv data."<<endl;
+                    //普通chlientfd
+                    char ch[100];
+                    int m = recv(epoll_events[i].data.fd,&ch,100,0);
+                    if(m==0)
+                    {
+                        //对端关闭了连接，从epollfd移除clientfd
+                        if(epoll_ctl(epollfd,EPOLL_CTL_DEL,epoll_events[i].data.fd,NULL) != -1)
+                        {
+                            cout<<"客户端移除成功,cliend:"<<epoll_events[i].data.fd<<endl;
+                        }
+
+                        close(epoll_events[i].data.fd);
+                    }   
+                    else if(m<0)
+                    {
+                        //出错
+                        if(errno!=EWOULDBLOCK && errno != EINTR)
+                        {
+                            if(epoll_ctl(epollfd,EPOLL_CTL_DEL,epoll_events[i].data.fd,NULL) != -1)
+                            {
+                                cout<<"客户端移除成功,cliend:"<<epoll_events[i].data.fd<<endl;
+                            }
+                            close(epoll_events[i].data.fd);
+                        }
+                    }
+                    else 
+                    {
+                        //正常收到数据
+                        cout<<"recv from client :"<<epoll_events[i].data.fd<<",   数据为:"<<ch<<endl;
+
+                    }
+                }
+            }
+            else if(epoll_events[i].data.fd & EPOLLERR)
+            {
+                  //暂不处理  
+            }
 
         }
 
-
-
-
     }
     
-
+    close(listenfd);
     return 0;
 }
 
@@ -106,4 +177,33 @@ void Epoll_Server::setnonblocking(int sock)
         exit(1);
     }
     
+}
+
+void Epoll_Server::fileTest(int sock)
+{
+     //传文件
+    char *filename = "/home/wfkj_0077/work/aaa.json";
+    FILE *fp = fopen(filename, "rb");      
+    if(fp == NULL)
+    {
+        printf("Cannot open file, press any key to exit!\n");
+        system("pause");
+        exit(0);
+    }
+
+     char buffer[1024]= {0};
+     int nCount;
+     while( (nCount = fread(buffer, 1, 1024, fp)) > 0 )
+    {
+     
+     send(sock, buffer, nCount, 0);
+    
+    }
+
+    shutdown(sock, SHUT_WR); //文件读取完毕，断开输出流，向客户端发送FIN包
+    recv(sock, buffer, 1024, 0); //阻塞，等待客户端接收完毕
+
+    fclose(fp);
+    close(sock);
+   
 }
