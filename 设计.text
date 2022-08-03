@@ -1,0 +1,170 @@
+namespace dwq  {
+
+
+enum  State{
+    ready = 0,
+    run   = 1,
+    stop  = 2   
+};
+
+class clientfd;
+
+class IServerHandle {
+public:
+    //收到数据时发生的事件
+    virtual void OnRead(clientfd * fd,BYTE * aData,int aSize)=0;    
+    //数据发送完的事件
+    virtual void OnSend()=0;    
+    //断开事件
+    virtual void OnDisConnect()=0;    
+    //客户端已经连接时间
+    virtual void OnConnected()=0;    
+};
+
+class clientfd{
+public:
+    int fd; //真正客户端的句柄  
+    char * ip ; //客户端ip
+
+
+    clientfd(int afd)
+    {
+        fd =afd; 
+    }
+
+    /**
+     * @brief 
+     * 接收
+     * 数据收完后，出发数据收取成功事件
+     * 
+     * Server->mHandle->OnRead()
+     */
+    void recv();
+
+    /**
+     * @brief 
+     * 发送 
+     */
+    void send();
+
+
+} ;
+
+
+/**
+ * @brief 服务器
+ */
+class Server 
+{
+protected:
+    IServerHandle * mHandle;
+
+     std::map<int,clientfd *> mClients;  //每创建一个client就加入一个
+
+   /**
+    * @brief 
+    * 启动   bind  listen
+    */
+   void  InitSocket();
+   //开一个多线程 监听客户连接 aceept
+   void  listen(); 
+   
+    /**
+    * @brief  工作线程，有几个CPU就开几个线程
+    * 
+    * 工作线程，ePoll 不包含listenfd 只发关注读事件
+    * 有可读数据时，根据 epoll的clientfd 到 Server查找客户端对象 ，调用 clientfd ->recv()
+    * 
+    */
+   void Work();
+
+
+public:
+   int  State; //枚举       
+
+
+public:
+   
+
+   /**
+    * @brief 初始化服务器，绑定IP 和端口
+    * 
+    */
+   Server(IServerHandle * aHandle,ip,port);
+   //
+   /**
+    * @brief 
+    * 
+    * 1：InitSocket()  
+    *  
+    * 2：listen();
+    * 
+    * 3：Work();   //线程循环读写  
+    *   
+    */
+   start();
+
+   /**
+    * @brief Construct a new Stop object
+    * 
+    * 设定全局状态 
+    *  
+    */
+   stop();
+
+   
+
+   /**
+    * @brief  accept 客户端
+    *  
+    * 创建客户端对象
+    */
+   aceept() ;
+
+
+};
+
+
+
+
+}
+
+/**
+ * @brief 
+ * 使用案例
+ * 
+ * class CdwqServer Public  IServerHandle{
+ * public:
+ *    //收到数据时发生的事件
+      virtual void OnRead(clientfd * fd,BYTE * aData,int aSize)
+      {
+          //处理数据接收完毕
+          fd->Send();
+      } 
+
+      //数据发送完的事件
+      virtual void OnSend()
+      {
+             
+      }    
+
+ * }
+ * 
+ * 
+ * int main()
+ * {
+ *    CdwqServer lHandle;
+ *    Server lServer(&lHandle,"127.0.0.1",8080); 
+ *    lServer.Start();
+ * }
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ */
+
+
+

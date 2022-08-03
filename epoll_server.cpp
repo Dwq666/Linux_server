@@ -11,11 +11,12 @@ int Epoll_Server::Test()
 
     //设置socket为非阻塞
     setnonblocking(listenfd);
+   
 
     //初始化服务器，绑定端口
     struct sockaddr_in serveraddr;
     serveraddr.sin_family = AF_INET;
-    char *local_addr="172.18.31.228";
+    char *local_addr="172.31.161.106";
     inet_aton(local_addr,&(serveraddr.sin_addr));
     serveraddr.sin_port=htons(8888);
     if(bind(listenfd,(sockaddr *)&serveraddr, sizeof(serveraddr))<0)
@@ -58,6 +59,14 @@ int Epoll_Server::Test()
     }    
 
     cout<<"创建成功1"<<endl;
+    thread t1(Listenproc,this);
+
+    for (int i=0;i<4;i++)
+    {
+        thread * lt = new thread(Workproc,this);
+    }
+
+    
     int n;
     while (true)
     {
@@ -105,7 +114,7 @@ int Epoll_Server::Test()
                          if(epoll_ctl(epollfd,EPOLL_CTL_ADD,clientfd,&clientfd_fd_event) != -1)
                          {
                                 cout<<"新的客户端连接 , cliendfd :"<<clientfd<<endl;
-                                fileTest(clientfd);
+                              
                             
                          }
                          else
@@ -179,31 +188,36 @@ void Epoll_Server::setnonblocking(int sock)
     
 }
 
-void Epoll_Server::fileTest(int sock)
+void Epoll_Server::ExecListen()
 {
-     //传文件
-    char *filename = "/home/wfkj_0077/work/aaa.json";
-    FILE *fp = fopen(filename, "rb");      
-    if(fp == NULL)
+    cout<<"新的监听线程"<<endl;
+    while(true)
     {
-        printf("Cannot open file, press any key to exit!\n");
-        system("pause");
-        exit(0);
+        sleep(1);
     }
-
-     char buffer[1024]= {0};
-     int nCount;
-     while( (nCount = fread(buffer, 1, 1024, fp)) > 0 )
-    {
-     
-     send(sock, buffer, nCount, 0);
-    
-    }
-
-    shutdown(sock, SHUT_WR); //文件读取完毕，断开输出流，向客户端发送FIN包
-    recv(sock, buffer, 1024, 0); //阻塞，等待客户端接收完毕
-
-    fclose(fp);
-    close(sock);
-   
 }
+
+
+void Epoll_Server::RunWork()
+{
+    cout<<"新的工作线程"<<endl;
+    while(true)
+    {
+        sleep(1);
+    }
+}
+
+
+
+ void Epoll_Server::Listenproc(void * aServer)
+ {
+    ((Epoll_Server*)aServer)->ExecListen();
+    //cout<<"新的线程"<<endl;
+ }
+
+ void Epoll_Server::Workproc(void * aServer)
+ {
+    ((Epoll_Server*)aServer)->RunWork();
+    //cout<<"新的线程"<<endl;
+ }
+ 

@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
+#include <thread>
 using namespace std;
 
 class Epoll_Server
@@ -14,6 +15,9 @@ class Epoll_Server
 public:
     int Test();
     void setnonblocking(int sock);
-    void fileTest(int sock);
-
+    void ExecListen();
+    void RunWork();
+    static void Listenproc(void * aServer);
+    static void Workproc(void * aServer);
 };
+
