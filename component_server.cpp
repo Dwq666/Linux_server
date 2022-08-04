@@ -20,19 +20,22 @@ int Com_Server::start()
     else
         return -1;
 
+
+
     //开启线程，监听有无客户端连接服务端
-    thread * linsten_client_thread = new thread(Listenproc,this);
-    
+    thread *linsten_client_thread = new thread(Listenproc,this);
+
+
+
+    iWorkEpollfd = epoll_create(256);
     //同时开启四个线程 循环clientfd是否有数据可读
     for(int i=1;i<5;i++)
     {
         mythreads.push_back(thread(Workproc,this));
     }  
 
-    for(int j=0;j<mythreads.size();j++)
-    {
-        mythreads[j];
-    }
+
+    
         
 
 }
@@ -95,7 +98,34 @@ bool Com_Server::setnonblocking(int sock)
     return true;
 }
 
-//开启监听线程
+
+//增加epollfd
+void Com_Server::addfd(int epollfd, int fd, bool oneshot)
+{
+    epoll_event event;
+    event.data.fd = fd;
+    event.events = EPOLLIN | EPOLLET;
+    if (oneshot) 
+    {
+        event.events |= EPOLLONESHOT;
+    }
+    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
+    setnonblocking(fd);
+}
+
+
+//重置修改epollfd状态
+void Com_Server::reset_oneshot(int epollfd, int fd)
+{
+    epoll_event event;
+    event.data.fd = fd;
+    event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+    epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
+}
+
+
+
+//开启线程
 void Com_Server::Listenproc(void * aServer)
 {
     ((Com_Server*)aServer)->linsten_client();
@@ -106,37 +136,27 @@ void Com_Server::Workproc(void * aServer)
     ((Com_Server*)aServer)->clentfd_work();
 }
 
+
+//socket(listenfd) epoll监听
 bool Com_Server::linsten_client()
 {   
     //创建epollfd
-    epollfd = epoll_create(256);
-    if(epollfd==-1)
+    int listenEpollFd = epoll_create(1);
+    if(listenEpollFd==-1)
     {
         cout<<"创建epoll失败"<<endl;
         close(listenfd);
         return false;
     }
 
-    epoll_event listen_fd_event;
-    listen_fd_event.data.fd = listenfd;
-    listen_fd_event.events = EPOLLIN;
-
-    //使用ET模式
-    //listen_fd_event.events |= EPOLLET;
-
-    //将监听socket(listenfd)绑定epollfd上
-    if(epoll_ctl(epollfd,EPOLL_CTL_ADD,listenfd,&listen_fd_event) < 0)
-    {
-        cout<<"绑定失败"<<endl;
-        close(listenfd);
-        return false;
-    } 
+    addfd(listenEpollFd,listenfd,false);
     
     int n;
+    //状态stop,要退出循环 
     while(1)
     {
         epoll_event epoll_events[1024];
-        n = epoll_wait(epollfd,epoll_events,1024,1000);
+        n = epoll_wait(listenEpollFd,epoll_events,1024,1000);  
         if(n<0)
         {
             //信号中断
@@ -158,31 +178,15 @@ bool Com_Server::linsten_client()
                 //监听socket(listenfd) 接受新连接
                 struct sockaddr_in clientaddr;
                 socklen_t clientaddrlen = sizeof(clientaddr);
-                clientfd = accept(listenfd,(sockaddr*)&clientaddr,&clientaddrlen);
+                int clientfd = accept(listenfd,(sockaddr*)&clientaddr,&clientaddrlen);
                 if(clientfd != -1)
                 {
                     //设置socket(clientfd)为非阻塞
                     setnonblocking(clientfd);
-
-                    epoll_event clientfd_fd_event;
-                    clientfd_fd_event.data.fd = clientfd;
-                    clientfd_fd_event.events = EPOLLIN;
-
-                    //使用ET模式
-                    //clientfd_fd_event.events |= EPOLLET;
-    
-                    if(epoll_ctl(epollfd,EPOLL_CTL_ADD,clientfd,&clientfd_fd_event) != -1)
-                    {
-                        cout<<"新的客户端连接 , cliendfd :"<<clientfd<<endl;
-                        Client_Fd * lcfd = new Client_Fd(clientfd);
-                        mClients[clientfd] = lcfd;
-                    }
-                    else
-                    {
-                        cout<<"添加客户端到epollfd失败"<<endl;
-                        close(clientfd);
-                    }
-
+                    Client_Fd * lcfd = new Client_Fd(clientfd);
+                    mClients[clientfd] = lcfd;
+                    addfd(iWorkEpollfd,clientfd,false);
+                    cout<<"有新的客户端连接 , cliendfd: "<<clientfd<<endl;
                 }
             }
         }
@@ -191,33 +195,53 @@ bool Com_Server::linsten_client()
 
 }
 
+
+//开启clientfd工作监听
 void Com_Server::clentfd_work()
-{
+{   
     while(1)
     {   
-       
-
-        //如果队列为空的话
-        if(!que_workfd.empty())
+        epoll_event work_epoll_events[1024];
+        int ret = epoll_wait(iWorkEpollfd,work_epoll_events,1024,1000);
+        if(ret<0)
         {
-            int lworkfd = que_workfd.front();
-            que_workfd.pop();
-            Client_Fd * lfd =  mClients.find(lworkfd)->second;
-            lfd->fd_recv(this); 
+            //信号中断
+            if(errno==EINTR)
+                continue;
+
+            //出错，退出
+            break;    
+        }
+        else if(ret==0)
+        {
+            //超时，继续
+            continue;
+        }
+        for(int i=0;i<ret;i++)
+        {   
+            int lclientfd = work_epoll_events[i].data.fd;
+            Client_Fd * lcfd = mClients.find(lclientfd)->second;           
+            if(work_epoll_events[i].events & EPOLLIN)
+            {
+                lcfd->fd_recv(this);
+               
+            }
+
         }
 
-     
 
-        
-       
     }
 }
 
 int Com_Server::getEpollfd()
 {
-    return epollfd;
+    return iWorkEpollfd;
 }
 
+void Com_Server::get_reset_oneshot(int epollfd, int fd)
+{
+    reset_oneshot(epollfd,fd);
+}
 
 
 
@@ -231,35 +255,48 @@ Client_Fd::~Client_Fd()
 }
 
 void Client_Fd::fd_recv(void * aserver)
-{
-    cout<<"client fd: "<<fd<<" 开始读取数据"<<endl;
-    char ch[100];
-    int m = recv(fd,&ch,100,0);
-    if(m==0)
+{   
+    Com_Server * lser = (Com_Server*)aserver;
+    cout<<"client fd: "<<fd<<" 开始接受数据"<<endl;
+    char ch[1024];
+    while(1)
     {
-        //对端关闭了连接，从epollfd移除clientfd
-        if(epoll_ctl(((Com_Server*)aserver)->getEpollfd(),EPOLL_CTL_DEL,fd,NULL) != -1)
+        int m = recv(fd,&ch,1024,0);
+        if(m==0)
         {
-            cout<<"关闭了连接，客户端移除成功,cliend: "<<fd<<endl;
-        }
-
-         close(fd);
-    }   
-    else if(m<0)
-    {
-        //出错
-        if(errno!=EWOULDBLOCK && errno != EINTR)
-        {
-            if(epoll_ctl(((Com_Server*)aserver)->getEpollfd(),EPOLL_CTL_DEL,fd,NULL) != -1)
+           
+            //对端关闭了连接，从epollfd移除clientfd
+            if(epoll_ctl(lser->getEpollfd(),EPOLL_CTL_DEL,fd,NULL) != -1)
             {
-                cout<<"连接错误，客户端移除成功,cliend: "<<fd<<endl;
+                cout<<"关闭了连接，客户端移除成功,cliend: "<<fd<<endl;
             }
+
             close(fd);
+            break;
+        }   
+        else if(m<0)
+        {
+            //出错
+            if(errno!=EWOULDBLOCK && errno != EINTR)
+            {
+                if(epoll_ctl(lser->getEpollfd(),EPOLL_CTL_DEL,fd,NULL) != -1)
+                {
+                    cout<<"连接错误，客户端移除成功,cliend: "<<fd<<endl;
+                }
+                close(fd);
+                break;
+            }       
+            else if(errno == EAGAIN) //没有数据可读了
+            {   
+               lser->get_reset_oneshot(lser->getEpollfd(),fd);
+               cout<<"以后在读"<<endl;
+               break;
+            }
+        }
+        else
+        {   pid_t ltid = gettid();
+            cout<<"线程id: "<<ltid<<endl;    
+            cout<<"clienfd: "<<fd<<",   数据为:"<<ch<<endl;
         }
     }
-    else
-    {
-        cout<<"clienfd: "<<fd<<",   数据为:"<<ch<<endl;
-    }
-
 }

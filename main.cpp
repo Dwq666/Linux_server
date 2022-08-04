@@ -6,10 +6,8 @@ using namespace std;
 
 int main()
 {
-    Com_Server * lsr = new Com_Server("192.168.249.240",8888);  
+    Com_Server * lsr = new Com_Server("172.31.160.185",8888);  
     lsr->start();
-
-    
 
     while (true)
     {
