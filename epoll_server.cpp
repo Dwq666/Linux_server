@@ -16,7 +16,7 @@ int Epoll_Server::Test()
     //初始化服务器，绑定端口
     struct sockaddr_in serveraddr;
     serveraddr.sin_family = AF_INET;
-    char *local_addr="172.31.161.106";
+    char *local_addr="192.168.249.240";
     inet_aton(local_addr,&(serveraddr.sin_addr));
     serveraddr.sin_port=htons(8888);
     if(bind(listenfd,(sockaddr *)&serveraddr, sizeof(serveraddr))<0)

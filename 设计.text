@@ -56,8 +56,8 @@ public:
  */
 class Server 
 {
-protected:
-    IServerHandle * mHandle;
+    protected:
+        IServerHandle * mHandle;
 
      std::map<int,clientfd *> mClients;  //每创建一个client就加入一个
 

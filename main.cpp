@@ -1,19 +1,20 @@
 #include "nanomsg_server.h"
 #include "epoll_server.h"
+#include "component_server.h"
 using namespace std;
-
-void abc()
-{
-    
-}
 
 
 int main()
 {
-     Epoll_Server a;
-     a.Test();
+    Com_Server * lsr = new Com_Server("192.168.249.240",8888);  
+    lsr->start();
 
-     thread t1(abc);
+    
+
+    while (true)
+    {
+        sleep(1);
+    }
 
     return 0;
 
