@@ -24,25 +24,23 @@ struct DataPack {
 //
 
 
-int 
 
 class CdwqServer:public IServerHandle
 {   
 public:
      //收到数据时发生的事件
-    virtual void OnRead(Client_Fd *lfd,char * a,int aSize)
+    virtual void OnRead(Client_Fd * aClient,char * aData,int aSize)
     {
-        if ()
-        
-        
         pid_t ltid = gettid();
         cout<<"线程id: "<<ltid<<endl;
-        cout<<"开始接受客户端clientfd: "<<lfd->get_fd()<<" 的数据"<<endl;
+        cout<<"开始接受客户端clientfd: "<<aClient->get_fd()<<" 的数据"<<endl;
+        cout<<"数据大小: "<<aSize<<" 数据为: "<<aData<<endl;
+
     }   
     //数据发送完的事件
     virtual void OnSend(Client_Fd *lfd)
     {
-        cout<<"数据接收完毕"<<endl;
+
     }   
     //断开事件
     virtual void OnDisConnect(Client_Fd *lfd)
@@ -61,7 +59,7 @@ public:
 int main()
 {   
     CdwqServer lshand;
-    Com_Server * lsr = new Com_Server(&lshand,"172.27.65.154",8888);  
+    Com_Server * lsr = new Com_Server(&lshand,"172.31.167.68",8888);  
     lsr->start();
 
     while (true)

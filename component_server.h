@@ -22,7 +22,7 @@ class IServerHandle
 {
 public:
      //收到数据时发生的事件
-    virtual void OnRead(Client_Fd *lfd)=0;    
+    virtual void OnRead(Client_Fd * aClient,char * aData,int aSize)=0;    
     //数据发送完的事件
     virtual void OnSend(Client_Fd *lfd)=0;    
     //断开事件
@@ -73,9 +73,7 @@ protected:
     static void Workproc(void * aServer);//开启工作线程
     void clentfd_work(); //epoll（clientfd）循环是否有数据可读
     void ondisconnect(Client_Fd * aClient);
-    void get_reset_oneshot(int epollfd, int fd);
-    void get_delfd(int epollfd, int fd);
-    int  getEpollfd();
+    void onServerRead(Client_Fd * aClient,char * aData,int aSize);
     
 public:
     Com_Server(IServerHandle * ahand,char * aip,int aport); //初始化

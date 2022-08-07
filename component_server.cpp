@@ -124,7 +124,13 @@ bool Com_Server::delfd(int epollfd, int fd)
 void Com_Server::ondisconnect(Client_Fd * aClient)
 {
     if (delfd(iWorkEpollfd,aClient->get_fd()))
-        shand->OnDisConnect(aClient);
+    shand->OnDisConnect(aClient);
+}
+
+void Com_Server::onServerRead(Client_Fd * aClient,char * aData,int aSize)
+{
+    reset_oneshot(iWorkEpollfd,aClient->get_fd());
+    shand->OnRead(aClient,aData,aSize);
 }
 
 
@@ -185,7 +191,7 @@ bool Com_Server::linsten_client()
                 {
                     //设置socket(clientfd)为非阻塞
                     setnonblocking(clientfd);
-                    Client_Fd *lcfd = new Client_Fd(clientfd);
+                    Client_Fd *lcfd = new Client_Fd(this,clientfd);
                     mClients[clientfd] = lcfd;
                     addfd(iWorkEpollfd, clientfd, false);
                     shand->OnConnected(lcfd);
@@ -230,21 +236,7 @@ void Com_Server::clentfd_work()
     }
 }
 
-int Com_Server::getEpollfd()
-{
-    return iWorkEpollfd;
-}
 
-void Com_Server::get_reset_oneshot(int epollfd, int fd)
-{
-    reset_oneshot(epollfd, fd);
-}
-
-void Com_Server::get_delfd(int epollfd, int fd)
-{
-    // delfd(epollfd,fd);
-    // shand->OnDisConnect();
-}
 
 Client_Fd::Client_Fd(Com_Server  * aServer,int afd)
 {
@@ -261,26 +253,27 @@ int Client_Fd::get_fd()
 }
 
 int Client_Fd::fd_recv()
-{
+{   
+    int lsize;  
     char lData[1024];
-    while (true)
+
+    recv(fd,(char *)&lsize,sizeof(lsize),0);
+    int index=0;
+
+    while (index<=lsize)
     {
-        int m = recv(fd, &lData, 4, 0);
+        int m = recv(fd, &lData, 1024, 0);
         if ((m == 0)
            ||  (m < 0 && errno != EWOULDBLOCK && errno != EINTR)
            )
         {
-            //对端关闭了连接，从epollfd移除clientfd
-            server->ondisconnect(this); //
+            //对端关闭了连接或出错，从epollfd移除clientfd
+            mServer->ondisconnect(this); 
             return 0;
-        }
-        else if (m < 0 && errno == EAGAIN)
-        {
-            //server->OnRead(this); //
-            server->reset_oneshot(server->iWorkEpollfd,fd);
-            shand->OnSend(lcfd);
-            break;
-        }
+        }         
+        index += m;
     }
-    return m;
+
+    mServer->onServerRead(this,lData,lsize); 
+    return 0;
 }
