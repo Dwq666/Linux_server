@@ -1,6 +1,7 @@
 #include "nanomsg_server.h"
 #include "epoll_server.h"
 #include "component_server.h"
+#include "libuv_server.h"
 using namespace std;
 
 
@@ -58,14 +59,16 @@ public:
 
 int main()
 {   
-    CdwqServer lshand;
+    /*CdwqServer lshand;
     Com_Server * lsr = new Com_Server(&lshand,"172.31.167.68",8888);  
     lsr->start();
 
     while (true)
     {
         sleep(1);
-    }
+    }*/
+
+    libtest();
 
     return 0;
 

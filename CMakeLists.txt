@@ -34,10 +34,13 @@ message("server LIBDIR ====>${LIBDIR}")
 set(LIBS
     nanomsg 
     anl
+    dl
     rt
     pthread
     nsl
     c
+    uv
+    uv_a
 ) 
 # 添加文件
 target_link_libraries(server ${LIBS})
